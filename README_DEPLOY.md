@@ -18,6 +18,9 @@
    ```bash
    scp .env $SERVER:$DEPLOY_PATH/.env
    ```
+   
+   **Важно:** По умолчанию в `env.sample` установлен `POLL_INTERVAL_SECONDS=1` для теста.
+   После тестирования измените в `.env` файле на нужный интервал (например, `POLL_INTERVAL_SECONDS=3600` для 1 часа или используйте `POLL_INTERVAL_MINUTES=60`).
 
 4. **Скопируйте сессию Telethon (если есть):**
    ```bash
@@ -104,6 +107,22 @@
    ```bash
    ssh user@server "cd /opt/tgchanelparser && bash start_service.sh"
    ```
+
+## Настройка интервала опроса
+
+В файле `.env` на сервере можно настроить интервал опроса каналов:
+
+```bash
+# Для теста (каждую секунду)
+POLL_INTERVAL_SECONDS=1
+
+# Для продакшена (каждый час)
+POLL_INTERVAL_SECONDS=3600
+# или
+POLL_INTERVAL_MINUTES=60
+```
+
+**Примечание:** `POLL_INTERVAL_SECONDS` имеет приоритет над `POLL_INTERVAL_MINUTES`.
 
 ## Проверка работы
 

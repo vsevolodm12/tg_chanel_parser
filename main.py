@@ -2,10 +2,12 @@ import asyncio
 import json
 import logging
 import os
+import threading
 from pathlib import Path
 from typing import List, Dict, Any
 
 from dotenv import load_dotenv
+from telegram.ext import Application
 
 from database.db import init_db, is_post_processed, add_processed_post, mark_as_sent
 from detectors.first_pass import quick_check
@@ -13,6 +15,7 @@ from detectors.second_pass import llm_detect
 from processors.formatter import format_event_message
 from tg_client.reader import init_client, fetch_new_posts
 from tg_client.bot import init_bot, send_message
+from bot_handler import setup_bot_handlers
 
 
 logging.basicConfig(
@@ -35,7 +38,7 @@ def load_channels() -> List[str]:
 
 
 async def process_channel(client, bot, channel: str) -> None:
-    posts = await fetch_new_posts(client, channel, limit=50)
+    posts = await fetch_new_posts(client, channel, limit=10)
     logger.info("Канал %s: найдено %s новых постов", channel, len(posts))
 
     for post in posts:
@@ -50,7 +53,6 @@ async def process_channel(client, bot, channel: str) -> None:
         if not quick_check(text):
             logger.info(f"Канал {channel}, пост {post_id}: не прошёл first_pass (быстрая проверка)")
             add_processed_post(channel, post_id, date, text, False, {})
-            await send_message(bot, f"❌ Не событие\n🔗 {source_link}")
             continue
 
         logger.info(f"Канал {channel}, пост {post_id}: прошёл first_pass, вызываю LLM...")
@@ -59,11 +61,23 @@ async def process_channel(client, bot, channel: str) -> None:
         add_processed_post(channel, post_id, date, text, is_event, result)
 
         if is_event:
-            message = format_event_message(result, source_link)
-            await send_message(bot, message)
-            mark_as_sent(channel, post_id)
-        else:
-            await send_message(bot, f"❌ Не событие\n🔗 {source_link}")
+            # Проверяем, что есть хотя бы какая-то полезная информация
+            # Если все поля пустые (null), то это не полноценное событие (например, дайджест)
+            has_useful_data = any([
+                result.get("title"),
+                result.get("date"),
+                result.get("place"),
+                result.get("link"),
+                result.get("description")
+            ])
+            
+            if has_useful_data:
+                message = format_event_message(result, source_link)
+                await send_message(bot, message)
+                mark_as_sent(channel, post_id)
+            else:
+                logger.info(f"Канал {channel}, пост {post_id}: событие без полезных данных (дайджест?), пропускаю отправку в бот")
+                # Не отправляем, но помечаем как обработанное
 
 
 async def worker():
@@ -79,7 +93,32 @@ async def worker():
         logger.warning("Нет каналов в channels.json")
 
     client = await init_client()
+    logger.info("Telethon клиент подключен")
+    
+    # Создаем Application для обработки команд бота
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    if bot_token:
+        application = Application.builder().token(bot_token).build()
+        setup_bot_handlers(application)
+        
+        # Запускаем бота для обработки команд в отдельном потоке
+        def run_bot():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                application.run_polling(drop_pending_updates=True, stop_signals=None)
+            except Exception as e:
+                logger.error(f"Ошибка в боте: {e}", exc_info=True)
+            finally:
+                loop.close()
+        
+        bot_thread = threading.Thread(target=run_bot, daemon=True)
+        bot_thread.start()
+        logger.info("Бот запущен для обработки команд")
+    
+    # Создаем простой Bot для отправки сообщений (для обратной совместимости)
     bot = init_bot()
+    logger.info("Сервис запущен, начинаю обработку каналов...")
 
     while True:
         try:
