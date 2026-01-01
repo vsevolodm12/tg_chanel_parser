@@ -74,7 +74,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 # Формируем ссылку и сообщение
                 source_link = f"https://t.me/{event['channel']}/{event['post_id']}"
                 message = format_event_message(event["data"], source_link)
-                await query.edit_message_text(message, disable_web_page_preview=True)
+                
+                # Добавляем кнопку "Назад" к сообщению
+                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="list_posts")]])
+                await query.edit_message_text(message, disable_web_page_preview=True, reply_markup=keyboard)
             else:
                 await query.edit_message_text("Пост не найден.")
         except (ValueError, IndexError, KeyError) as e:
