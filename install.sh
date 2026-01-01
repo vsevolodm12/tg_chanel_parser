@@ -16,6 +16,9 @@ REPO_URL="https://github.com/vsevolodm12/tg_chanel_parser.git"
 
 echo -e "${GREEN}🚀 Установка TG Channel Parser${NC}"
 echo ""
+echo -e "${YELLOW}📍 Папка установки: $INSTALL_DIR${NC}"
+echo -e "${YELLOW}💡 Чтобы установить в другую папку: INSTALL_DIR=/path/to/dir curl ...${NC}"
+echo ""
 
 # Проверка Python
 if ! command -v python3 &> /dev/null; then
@@ -32,11 +35,19 @@ if ! command -v git &> /dev/null; then
     exit 1
 fi
 
-# Клонируем или обновляем репозиторий
+# Проверка существующей папки
 if [ -d "$INSTALL_DIR" ]; then
-    echo -e "${YELLOW}📁 Папка $INSTALL_DIR уже существует, обновляю...${NC}"
-    cd "$INSTALL_DIR"
-    git pull origin main || true
+    # Проверяем что это наш проект
+    if [ -f "$INSTALL_DIR/main.py" ] && [ -d "$INSTALL_DIR/.git" ]; then
+        echo -e "${YELLOW}📁 Проект уже существует, обновляю...${NC}"
+        cd "$INSTALL_DIR"
+        git pull origin main || true
+    else
+        echo -e "${RED}❌ Папка $INSTALL_DIR уже существует, но это не наш проект!${NC}"
+        echo -e "${YELLOW}Укажите другую папку через переменную INSTALL_DIR:${NC}"
+        echo -e "${GREEN}INSTALL_DIR=/opt/tgparser curl ...${NC}"
+        exit 1
+    fi
 else
     echo -e "${YELLOW}📥 Клонирую репозиторий...${NC}"
     git clone "$REPO_URL" "$INSTALL_DIR"
@@ -67,6 +78,12 @@ fi
 
 echo ""
 echo -e "${GREEN}✅ Установка завершена!${NC}"
+echo ""
+echo -e "${GREEN}✓ Проект полностью изолирован:${NC}"
+echo -e "  • Виртуальное окружение: $INSTALL_DIR/venv (не влияет на системные пакеты)${NC}"
+echo -e "  • База данных: $INSTALL_DIR/database.db (локальная)${NC}"
+echo -e "  • Конфигурация: $INSTALL_DIR/.env (локальная)${NC}"
+echo -e "  • Логи: $INSTALL_DIR/service.log (локальные)${NC}"
 echo ""
 echo -e "${YELLOW}📍 Проект установлен в: $INSTALL_DIR${NC}"
 echo ""
