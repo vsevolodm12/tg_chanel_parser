@@ -1,0 +1,18 @@
+[Unit]
+Description=Telegram Channel Parser Service
+After=network.target
+
+[Service]
+Type=simple
+User=YOUR_USER
+WorkingDirectory=/opt/tgchanelparser
+Environment="PATH=/opt/tgchanelparser/venv/bin"
+ExecStart=/opt/tgchanelparser/venv/bin/python /opt/tgchanelparser/main.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/opt/tgchanelparser/service.log
+StandardError=append:/opt/tgchanelparser/service.log
+
+[Install]
+WantedBy=multi-user.target
+
