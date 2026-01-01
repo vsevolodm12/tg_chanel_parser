@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import threading
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -41,24 +42,44 @@ async def process_channel(client, bot, channel: str) -> None:
     posts = await fetch_new_posts(client, channel, limit=10)
     logger.info("Канал %s: найдено %s новых постов", channel, len(posts))
 
+    # Игнорируем посты старше 7 дней
+    cutoff_date = datetime.now() - timedelta(days=7)
+    
     for post in posts:
         post_id = post["id"]
         text = post["text"]
-        date = post["date"]
+        date_str = post["date"]
         source_link = f"https://t.me/{channel}/{post_id}"
 
         if is_post_processed(channel, post_id):
             continue
+        
+        # Проверяем дату поста - игнорируем старые посты
+        try:
+            if isinstance(date_str, str):
+                post_date = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+            else:
+                post_date = date_str
+            if isinstance(post_date, datetime):
+                # Убираем timezone для сравнения
+                post_date_naive = post_date.replace(tzinfo=None) if post_date.tzinfo else post_date
+                if post_date_naive < cutoff_date:
+                    logger.info(f"Канал {channel}, пост {post_id}: пост слишком старый ({post_date_naive}), пропускаю")
+                    add_processed_post(channel, post_id, date_str, text, False, {})
+                    continue
+        except Exception as e:
+            logger.warning(f"Канал {channel}, пост {post_id}: не удалось распарсить дату {date_str}: {e}")
+            # Продолжаем обработку, если не удалось распарсить дату
 
         if not quick_check(text):
             logger.info(f"Канал {channel}, пост {post_id}: не прошёл first_pass (быстрая проверка)")
-            add_processed_post(channel, post_id, date, text, False, {})
+            add_processed_post(channel, post_id, date_str, text, False, {})
             continue
 
         logger.info(f"Канал {channel}, пост {post_id}: прошёл first_pass, вызываю LLM...")
         result = llm_detect(text)
         is_event = bool(result.get("is_event"))
-        add_processed_post(channel, post_id, date, text, is_event, result)
+        add_processed_post(channel, post_id, date_str, text, is_event, result)
 
         if is_event:
             # Проверяем, что есть хотя бы какая-то полезная информация
